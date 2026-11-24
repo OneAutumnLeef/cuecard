@@ -1,0 +1,50 @@
+#!/bin/bash
+# prompter: send scripts to Notch Prompter and control it from the terminal (or from Claude).
+#
+#   prompter add <file|-> [--title "Title"] [--start]   add a script (from a file, or stdin with "-")
+#   prompter open "Title" [--start]                       switch to a script in the library
+#   prompter start | pause | toggle | show | hide | restart
+#   prompter voice on|off                                 follow your voice / fixed speed
+#   prompter list                                         scripts in the library, newest first
+set -euo pipefail
+
+SUPPORT="$HOME/Library/Application Support/MacTele"
+INBOX="$SUPPORT/Inbox"
+
+enc() { /usr/bin/python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"; }
+send() { /usr/bin/open -g "notchprompter://$1"; }
+usage() { sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+
+cmd="${1:-}"; [ -n "$cmd" ] || usage; shift || true
+case "$cmd" in
+  add)
+    src="${1:-}"; [ -n "$src" ] || usage; shift
+    title=""; start=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --title) title="$2"; shift 2 ;;
+        --start) start=1; shift ;;
+        *) usage ;;
+      esac
+    done
+    mkdir -p "$INBOX"
+    name="$(uuidgen).md"
+    if [ "$src" = "-" ]; then cat > "$INBOX/$name"; else cp "$src" "$INBOX/$name"; fi
+    if [ -z "$title" ]; then
+      if [ "$src" = "-" ]; then title="Script $(date '+%d %b %H.%M')"; else title="$(basename "${src%.*}")"; fi
+    fi
+    send "add?title=$(enc "$title")&inbox=$name&start=$start"
+    echo "Sent “$title” to Notch Prompter."
+    ;;
+  open)
+    title="${1:-}"; [ -n "$title" ] || usage; shift
+    start=0; [ "${1:-}" = "--start" ] && start=1
+    send "open?title=$(enc "$title")&start=$start"
+    ;;
+  start|pause|toggle|show|hide|restart) send "$cmd" ;;
+  voice)
+    case "${1:-}" in on) send "mode?voice=1" ;; off) send "mode?voice=0" ;; *) usage ;; esac ;;
+  list)
+    ls -t "$SUPPORT/Scripts" 2>/dev/null | sed -n 's/\.md$//p' ;;
+  *) usage ;;
+esac

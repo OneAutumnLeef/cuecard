@@ -1,0 +1,5 @@
+.build/
+.build.nosync/
+*.app
+.DS_Store
+.swiftpm/
